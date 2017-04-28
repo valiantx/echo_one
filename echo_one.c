@@ -258,10 +258,10 @@ int main(int argc, char* argv[])
 {
     //* get opts*/
 #if !defined(CLIENT)
-    PRINT("echo server\n%s", PROMPT);
+    PRINT("echo server");
     in_addr_t  server_ip = INADDR_ANY;
 #else
-    PRINT("echo client\n%s", PROMPT);
+    PRINT("echo client");
     in_addr_t  server_ip = inet_addr("127.0.0.1");
 #endif
     unsigned short server_port = SERVER_PORT;
