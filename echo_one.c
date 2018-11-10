@@ -23,7 +23,7 @@
 #ifndef NULL
 #define NULL (void*)0
 #endif
-typedef enum { FALSE, TRUE} BOOL; 
+typedef enum { FALSE, TRUE} BOOL;
 #define PROMPT "->"
 
 //* Log */
@@ -48,11 +48,12 @@ BOOL check_log_level(int level) {
 #define INFO(_fmt, ...) print_log(LOG_INFO, "[INFO]"_fmt"\n"PROMPT, ##__VA_ARGS__)
 #define DEBUG(_fmt, ...) print_log(LOG_DEBUG, "[DEBUG]"_fmt"\n"PROMPT, ##__VA_ARGS__)
 
-void print_log(int level, char* fmt, ...){
-    if(!check_log_level(level)) {
+void print_log(int level, char* fmt, ...)
+{
+    if (!check_log_level(level)) {
         return;
     }
-    
+
     va_list ap;
     char buf[LOG_BUF_SIZE];
     va_start(ap, fmt);
@@ -78,10 +79,11 @@ typedef struct EventOne {
 EventOne* ev_list = NULL;
 void on_read(int fd, short event, void* arg);
 
-EventOne* event_one_new(struct event_base* base, int readfd, int writefd) {    
+EventOne* event_one_new(struct event_base* base, int readfd, int writefd)
+{
     EventOne* ev_ptr = (EventOne*)malloc(sizeof(*ev_ptr));
     memset(ev_ptr, 0, sizeof(*ev_ptr));
-    if(ev_list) {        
+    if (ev_list) {
         ev_ptr->next = ev_list;
         ev_list->pre = ev_ptr;
     }
@@ -97,36 +99,39 @@ EventOne* event_one_new(struct event_base* base, int readfd, int writefd) {
     return ev_ptr;
 }
 
-void event_one_release(EventOne* ev_ptr) {
-    if(event_initialized(&ev_ptr->read_ev)) {        
+void event_one_release(EventOne* ev_ptr)
+{
+    if (event_initialized(&ev_ptr->read_ev)) {
         event_del(&ev_ptr->read_ev);
     }
-    if(event_initialized(&ev_ptr->write_ev)) {
+    if (event_initialized(&ev_ptr->write_ev)) {
         event_del(&ev_ptr->write_ev);
     }
-    if(ev_ptr->pre) {
+    if (ev_ptr->pre) {
         ev_ptr->pre->next = ev_ptr->next;
     }
-    if(ev_ptr->next) {
+    if (ev_ptr->next) {
         ev_ptr->next->pre = ev_ptr->pre;
     }
-    if(ev_ptr == ev_list) {
+    if (ev_ptr == ev_list) {
         ev_list = ev_list->next;
     }
     free(ev_ptr);
 }
 
-void event_one_release_all() {
-    EventOne* ev_ptr;
-    for(ev_ptr = ev_list; ev_ptr != NULL; ev_ptr = ev_ptr->next) {
-        if(event_initialized(&ev_ptr->read_ev)) {        
+void event_one_release_all()
+{
+    EventOne* ev_ptr = ev_list;
+    while (ev_ptr != NULL) {
+        if (event_initialized(&ev_ptr->read_ev)) {
             event_del(&ev_ptr->read_ev);
         }
-        if(event_initialized(&ev_ptr->write_ev)) {
+        if (event_initialized(&ev_ptr->write_ev)) {
             event_del(&ev_ptr->write_ev);
         }
 
-        free(ev_ptr);
+        ev_ptr = ev_ptr->next;
+        free(ev_ptr->pre);
     }
     ev_list = NULL;
 }
@@ -134,7 +139,7 @@ void event_one_release_all() {
 void on_write(int fd, short event, void* arg)
 {
     EventOne* ev_ptr = (EventOne*)arg;
-    if(ev_ptr->data_len > 0) {
+    if (ev_ptr->data_len > 0) {
         if(STDOUT_FILENO == fd) {
             ev_ptr->data_len += sprintf(ev_ptr->buffer+ev_ptr->data_len, PROMPT);
         }
@@ -161,7 +166,7 @@ void on_read(int fd, short event, void* arg)
         return;
     }
     ev_ptr->buffer[ev_ptr->data_len] = 0;
-    if(!strncmp("exit", ev_ptr->buffer, 4)) {
+    if (!strncmp("exit", ev_ptr->buffer, 4)) {
         INFO("will exit in 1 second");
         struct timeval delay = {1, 0};
         event_base_loopexit(ev_ptr->base, &delay);
@@ -181,11 +186,11 @@ void on_accept(int fd, short event, void* arg)
 {
     struct sockaddr_in cli_addr;
     int newfd, sin_size;
-    
+
     sin_size = sizeof(struct sockaddr_in);
     newfd = accept(fd, (struct sockaddr*)&cli_addr, &sin_size);
     INFO("new connection, fd %d", newfd);
-    
+
     event_one_new((struct event_base*)arg, newfd, newfd);
 }
 #endif
@@ -206,42 +211,42 @@ void on_signal(int fd, short event, void* arg)
 
 //* Set TCP keep alive option to detect dead peers. The interval option 
 // * is only used for Linux as we are using Linux-specific APIs to set 
-// * the probe send time, interval, and count. */  
-int keep_alive(int fd, int interval)  
+// * the probe send time, interval, and count. */
+int keep_alive(int fd, int interval)
 {
-    int val = 1;  
-    //enable keepalive  
-    if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof(val)) == -1)  {  
+    int val = 1;
+    //enable keepalive
+    if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof(val)) == -1)  {
         return -1;
-    }  
-  
-    //* Default settings are more or less garbage, with the keepalive time 
-    // * set to 7200 by default on Linux. Modify settings to make the feature 
-    // * actually useful. */  
-  
-    //* Send first probe after interval. */  
-    val = interval;  
-    if (setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &val, sizeof(val)) < 0) {  
-        return -1;  
-    }  
-  
-    //* Send next probes after the specified interval. Note that we set the 
-     //* delay as interval / 3, as we send three probes before detecting 
-     //* an error (see the next setsockopt call). */  
-    val = interval/3;  
-    if (val == 0) val = 1;
-    if (setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &val, sizeof(val)) < 0) {  
-        return -1;  
-    }  
-  
-    //* Consider the socket in error state after three we send three ACK 
-    // * probes without getting a reply. */  
-    val = 3;  
-    if (setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &val, sizeof(val)) < 0) {  
-        return -1;  
     }
-  
-    return 0;  
+
+    //* Default settings are more or less garbage, with the keepalive time
+    // * set to 7200 by default on Linux. Modify settings to make the feature
+    // * actually useful. */
+
+    //* Send first probe after interval. */
+    val = interval;
+    if (setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &val, sizeof(val)) < 0) {
+        return -1;
+    }
+
+    //* Send next probes after the specified interval. Note that we set the
+     //* delay as interval / 3, as we send three probes before detecting
+     //* an error (see the next setsockopt call). */
+    val = interval/3;
+    if (val == 0) val = 1;
+    if (setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &val, sizeof(val)) < 0) {
+        return -1;
+    }
+
+    //* Consider the socket in error state after three we send three ACK
+    // * probes without getting a reply. */
+    val = 3;
+    if (setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &val, sizeof(val)) < 0) {
+        return -1;
+    }
+
+    return 0;
 } 
 
 void usage() {
@@ -268,7 +273,7 @@ int main(int argc, char* argv[])
 
     int ch;
     opterr = 0;
-    while((ch = getopt(argc, argv, "hH:p:vV")) != -1) {
+    while ((ch = getopt(argc, argv, "hH:p:vV")) != -1) {
         switch(ch) {
             case 'h':
             case '?':
@@ -297,18 +302,18 @@ int main(int argc, char* argv[])
     addr_in.sin_family = AF_INET;
     addr_in.sin_port = htons(server_port);
     addr_in.sin_addr.s_addr = server_ip;
-    
+
 #if !defined(CLIENT)
     int val = 1;
     setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(int));
     bind(socket_fd, (struct sockaddr*)&addr_in, sizeof(struct sockaddr));
-    if(listen(socket_fd, BACKLOG) < 0) {
+    if (listen(socket_fd, BACKLOG) < 0) {
         WARN("listen fail");
         return -1;
     }
     keep_alive(socket_fd, KEEP_ALIVE_INERVAL);
 #else
-    if(connect(socket_fd, (struct sockaddr *)&addr_in, sizeof(struct sockaddr)) < 0) {
+    if (connect(socket_fd, (struct sockaddr *)&addr_in, sizeof(struct sockaddr)) < 0) {
         WARN("connect fail");
         return -1;
     }    
