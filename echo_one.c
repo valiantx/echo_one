@@ -69,7 +69,7 @@ typedef struct EventOne {
 	struct event read_ev;
 	struct event write_ev;
 	int data_len;
-	char buffer[BUFFER_SIZE+8];    
+	char buffer[BUFFER_SIZE+8];
 	int read_fd;
 	int write_fd;
 	struct EventOne *pre;
@@ -122,6 +122,7 @@ void event_one_release(EventOne* ev_ptr)
 void event_one_release_all()
 {
     EventOne* ev_ptr = ev_list;
+    EventOne* next;
     while (ev_ptr != NULL) {
         if (event_initialized(&ev_ptr->read_ev)) {
             event_del(&ev_ptr->read_ev);
@@ -130,8 +131,9 @@ void event_one_release_all()
             event_del(&ev_ptr->write_ev);
         }
 
-        ev_ptr = ev_ptr->next;
-        free(ev_ptr->pre);
+        next = ev_ptr->next;
+        free(ev_ptr);
+        ev_ptr = next;
     }
     ev_list = NULL;
 }
